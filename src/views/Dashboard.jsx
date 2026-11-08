@@ -30,7 +30,7 @@ export default function Dashboard({ data, update, go }) {
   const odo = currentOdo(data)
   const due = data.maintenance.filter(i => maintStatus(i, odo).level !== 'ok')
 
-  const endTrip = () => confirm('End this trip? Your data is kept.') && update(d => { d.trip.active = false })
+  const endTrip = () => confirm('End this trip? Your data is kept.') && update(d => { d.trip.active = false; if (!d.trip.endDate) d.trip.endDate = toDay(new Date().toISOString()) })
 
   return (
     <>
@@ -51,7 +51,8 @@ export default function Dashboard({ data, update, go }) {
             : <button className="text-sm text-teal-600 dark:text-teal-400 flex items-center gap-1" onClick={() => setForm('start')}><Play size={14} />New trip</button>}
         </div>
         <p className="text-sm text-slate-500 mb-2">
-          {trip.from || trip.to ? `${trip.from || '?'} → ${trip.to || '?'} · ` : ''}started {fmtDate(trip.startedAt)}{!active && trip.active === false ? ' · ended' : ''}
+          {trip.from || trip.to ? `${trip.from || '?'} ${trip.returnTrip ? '⇄' : '→'} ${trip.to || '?'} · ` : ''}{trip.returnTrip ? 'Return' : trip.from || trip.to ? 'One way' : ''}{trip.from || trip.to ? ' · ' : ''}
+          {fmtDate(trip.startedAt)}{trip.endDate && trip.endDate !== startDay ? ` – ${fmtDate(trip.endDate)}` : ''}{!active && trip.active === false ? ' · ended' : ''}
         </p>
         <div className="grid grid-cols-3 gap-2 text-center">
           <Stat v={nf(dist)} l="km" /><Stat v={days} l="active days" />
@@ -98,15 +99,16 @@ const Quick = ({ icon: Icon, label, onClick, hi }) => (
 
 function StartTrip({ odo, onClose, onSave }) {
   const today = toDay(new Date().toISOString())
-  const [f, setF] = useState({ name: '', date: today, odo: odo || '', from: '', to: '', litres: '', cost: '', station: '' })
+  const [f, setF] = useState({ name: '', date: today, endDate: '', returnTrip: true, odo: odo || '', from: '', to: '', litres: '', cost: '', station: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const o = num(f.odo), l = num(f.litres), c = num(f.cost)
   const odoErr = f.odo !== '' && o < 0 ? 'Must be positive' : ''
-  const valid = f.date && !odoErr && (f.litres === '' || l > 0)
+  const dateErr = f.endDate && f.endDate < f.date ? 'End date cannot be before start date' : ''
+  const valid = f.date && !odoErr && !dateErr && (f.litres === '' || l > 0)
   const submit = (e) => {
     e.preventDefault(); if (!valid) return
     onSave({
-      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, from: f.from.trim(), to: f.to.trim() },
+      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, endDate: f.endDate, returnTrip: f.returnTrip, from: f.from.trim(), to: f.to.trim() },
       fill: l > 0 ? { id: uid(), date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, location: f.station } : null
     })
   }
@@ -118,10 +120,12 @@ function StartTrip({ odo, onClose, onSave }) {
           <Field label="Start date"><input type="date" className="input" value={f.date} onChange={set('date')} required /></Field>
           <Field label="Odometer (km)" error={odoErr}><input type="number" inputMode="decimal" className="input" value={f.odo} onChange={set('odo')} /></Field>
         </div>
+        <Field label="End date (optional)" error={dateErr}><input type="date" className={`input ${dateErr ? 'input-err' : ''}`} min={f.date} value={f.endDate} onChange={set('endDate')} /></Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Starting from"><input className="input" value={f.from} onChange={set('from')} /></Field>
           <Field label="Going to"><input className="input" value={f.to} onChange={set('to')} /></Field>
         </div>
+        <Toggle value={f.returnTrip} onChange={v => setF({ ...f, returnTrip: v })} />
         <p className="label !mb-0 pt-1">Tank fill-up at start (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={set('litres')} /></Field>
@@ -139,18 +143,34 @@ function EditTrip({ trip, onClose, onSave }) {
   const [start, setStart] = useState(toDay(trip.startedAt))
   const [from, setFrom] = useState(trip.from || '')
   const [to, setTo] = useState(trip.to || '')
+  const [end, setEnd] = useState(trip.endDate || '')
+  const [ret, setRet] = useState(trip.returnTrip ?? true)
+  const endErr = end && end < start ? 'End date cannot be before start date' : ''
   return (
     <Sheet title="Edit trip" onClose={onClose}>
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); start && onSave({ name: name.trim() || 'Current trip', startedAt: new Date(start + 'T00:00:00').toISOString(), from: from.trim(), to: to.trim() }) }}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); start && !endErr && onSave({ name: name.trim() || 'Current trip', startedAt: new Date(start + 'T00:00:00').toISOString(), endDate: end, returnTrip: ret, from: from.trim(), to: to.trim() }) }}>
         <Field label="Trip name"><input className="input" value={name} onChange={e => setName(e.target.value)} /></Field>
         <Field label="Trip start date"><input type="date" className="input" value={start} onChange={e => setStart(e.target.value)} required /></Field>
+        <Field label="End date (optional)" error={endErr}><input type="date" className={`input ${endErr ? 'input-err' : ''}`} min={start} value={end} onChange={e => setEnd(e.target.value)} /></Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="From"><input className="input" value={from} onChange={e => setFrom(e.target.value)} /></Field>
           <Field label="To"><input className="input" value={to} onChange={e => setTo(e.target.value)} /></Field>
         </div>
+        <Toggle value={ret} onChange={setRet} />
         <p className="text-xs text-slate-500">Legs, fuel entries and stops dated on or after the start date count towards this trip.</p>
         <button className="btn w-full">Save trip</button>
       </form>
     </Sheet>
+  )
+}
+
+function Toggle({ value, onChange }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {[[true, 'Return trip'], [false, 'One way']].map(([v, l]) => (
+        <button type="button" key={l} onClick={() => onChange(v)}
+          className={`min-h-[44px] rounded-xl font-medium ${value === v ? 'bg-teal-600 text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>{l}</button>
+      ))}
+    </div>
   )
 }
