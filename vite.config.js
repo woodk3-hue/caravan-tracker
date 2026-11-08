@@ -10,6 +10,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
+        id: '/caravan-tracker/',
         name: 'Caravan Logbook',
         short_name: 'Logbook',
         description: 'Offline caravan kilometre, fuel, maintenance and campsite log',
@@ -18,9 +19,9 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         icons: [
-          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       },
       workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico}'] }
