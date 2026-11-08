@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Route, Fuel, Wrench, Flag, Pencil, Moon, Play } from 'lucide-react'
 import { Header, Field, Sheet } from '../ui.jsx'
-import { legDistance, nf, currentOdo, maintStatus, fmtDate, num, renumber, linkFuel } from '../util.js'
+import { legDistance, nf, currentOdo, maintStatus, fmtDate, num, renumber, linkFuel, tankL } from '../util.js'
 import { uid } from '../storage.js'
 
 const toDay = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
@@ -86,7 +86,7 @@ export default function Dashboard({ data, update, go }) {
         )}
       </div>
 
-      {form === 'start' && <StartTrip odo={odo} onClose={() => setForm(null)} onSave={({ trip: t, fill, legs }) => {
+      {form === 'start' && <StartTrip odo={odo} tank={tankL(data)} onClose={() => setForm(null)} onSave={({ trip: t, fill, legs }) => {
         update(d => { d.trip = t; if (fill) d.fuel.push(fill); legs.forEach(l => d.legs.push(l)); if (legs.length) renumber(d.legs) }); setForm(null)
       }} />}
       {form === 'edit' && <EditTrip trip={trip} data={data} odo={odo} onClose={() => setForm(null)} onSave={f => { update(d => applyTripEdit(d, f)); setForm(null) }} />}
@@ -115,7 +115,7 @@ const Quick = ({ icon: Icon, label, onClick, hi }) => (
   </button>
 )
 
-function StartTrip({ odo, onClose, onSave }) {
+function StartTrip({ odo, tank, onClose, onSave }) {
   const today = toDay(new Date().toISOString())
   const [f, setF] = useState({ name: '', date: today, endDate: '', km: '', returnTrip: true, odo: odo || '', from: '', to: '', litres: '', cost: '', ppl: '', station: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -123,7 +123,8 @@ function StartTrip({ odo, onClose, onSave }) {
   const o = num(f.odo), l = num(f.litres), c = num(f.cost)
   const odoErr = f.odo !== '' && o < 0 ? 'Must be positive' : ''
   const dateErr = f.endDate && f.endDate < f.date ? 'End date cannot be before start date' : ''
-  const valid = f.date && !odoErr && !dateErr && (f.litres === '' || l > 0)
+  const litreErr = l > tank ? `More than your ${tank} L tank` : ''
+  const valid = f.date && !odoErr && !dateErr && !litreErr && (f.litres === '' || l > 0)
   const submit = (e) => {
     e.preventDefault(); if (!valid) return
     const km = num(f.km), legs = []
@@ -159,7 +160,7 @@ function StartTrip({ odo, onClose, onSave }) {
         </p>}
         <p className="label !mb-0 pt-1">Tank fill-up at start (optional)</p>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={setLinked('litres')} /></Field>
+          <Field label="Litres" error={litreErr}><input type="number" inputMode="decimal" step="any" className={`input ${litreErr ? 'input-err' : ''}`} value={f.litres} onChange={setLinked('litres')} /></Field>
           <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={setLinked('cost')} /></Field>
         </div>
         <Field label="Price per litre ($/L, optional)"><input type="number" inputMode="decimal" step="any" className="input" placeholder="e.g. 2.149" value={f.ppl} onChange={setLinked('ppl')} /></Field>
@@ -231,7 +232,9 @@ function EditTrip({ trip, data, odo, onClose, onSave }) {
   const setLinked = (k) => (e) => setF(linkFuel(f, k, e.target.value))
   const dateErr = f.endDate && f.endDate < f.date ? 'End date cannot be before start date' : ''
   const kmErr = f.km !== '' && !(num(f.km) > 0) ? 'Must be greater than 0' : ''
-  const valid = f.date && !dateErr && !kmErr && (f.litres === '' || num(f.litres) > 0)
+  const tank = tankL(data)
+  const litreErr = num(f.litres) > tank ? `More than your ${tank} L tank` : ''
+  const valid = f.date && !dateErr && !kmErr && !litreErr && (f.litres === '' || num(f.litres) > 0)
   return (
     <Sheet title="Edit trip" onClose={onClose}>
       <form className="space-y-3" onSubmit={e => { e.preventDefault(); valid && onSave(f) }}>
@@ -248,7 +251,7 @@ function EditTrip({ trip, data, odo, onClose, onSave }) {
         <Field label="Distance one way (km)" error={kmErr}><input type="number" inputMode="decimal" step="any" className={`input ${kmErr ? 'input-err' : ''}`} value={f.km} onChange={set('km')} /></Field>
         <p className="label !mb-0 pt-1">Tank fill-up at start</p>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={setLinked('litres')} /></Field>
+          <Field label="Litres" error={litreErr}><input type="number" inputMode="decimal" step="any" className={`input ${litreErr ? 'input-err' : ''}`} value={f.litres} onChange={setLinked('litres')} /></Field>
           <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={setLinked('cost')} /></Field>
         </div>
         <Field label="Price per litre ($/L, optional)"><input type="number" inputMode="decimal" step="any" className="input" placeholder="e.g. 2.149" value={f.ppl} onChange={setLinked('ppl')} /></Field>

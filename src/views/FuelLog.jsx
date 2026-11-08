@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2, Zap, Fuel } from 'lucide-react'
 import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
-import { nowLocal, num, nf, fmtDateTime, currentOdo, linkFuel } from '../util.js'
+import { nowLocal, num, nf, fmtDateTime, currentOdo, linkFuel, tankL } from '../util.js'
 import { uid } from '../storage.js'
 
 export default function FuelLog({ data, update, openForm, clearForm }) {
@@ -44,7 +44,9 @@ function FuelForm({ data, initial, onClose, onSave }) {
   const setLinked = (k) => (e) => setF(linkFuel(f, k, e.target.value, 'amount'))
   const odo = num(f.odo), amt = num(f.amount), cost = num(f.cost)
   const odoErr = f.odo !== '' && odo < 0 ? 'Must be positive' : ''
-  const valid = !isNaN(odo) && !odoErr && amt > 0 && (f.cost === '' || cost >= 0)
+  const tank = tankL(data)
+  const amtErr = f.type === 'fuel' && amt > tank ? `More than your ${tank} L tank` : ''
+  const valid = !isNaN(odo) && !odoErr && amt > 0 && !amtErr && (f.cost === '' || cost >= 0)
   const submit = (ev) => {
     ev.preventDefault()
     if (!valid) return
@@ -64,7 +66,7 @@ function FuelForm({ data, initial, onClose, onSave }) {
         <Field label="Date & time"><input type="datetime-local" className="input" value={f.date} onChange={set('date')} required /></Field>
         <Field label="Odometer (km)" error={odoErr}><input type="number" inputMode="decimal" className={`input ${odoErr ? 'input-err' : ''}`} value={f.odo} onChange={set('odo')} required /></Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label={f.type === 'fuel' ? 'Litres' : 'kWh'}><input type="number" inputMode="decimal" step="any" className="input" value={f.amount} onChange={setLinked('amount')} required /></Field>
+          <Field label={f.type === 'fuel' ? 'Litres' : 'kWh'} error={amtErr}><input type="number" inputMode="decimal" step="any" className={`input ${amtErr ? 'input-err' : ''}`} value={f.amount} onChange={setLinked('amount')} required /></Field>
           <Field label="Total cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={setLinked('cost')} /></Field>
         </div>
         {f.type === 'fuel' && <Field label="Price per litre ($/L, optional)"><input type="number" inputMode="decimal" step="any" className="input" placeholder="e.g. 2.149" value={f.ppl} onChange={setLinked('ppl')} /></Field>}

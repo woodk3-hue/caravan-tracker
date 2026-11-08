@@ -49,3 +49,5 @@ export function linkFuel(f, key, value, litresKey = 'litres') {
   }
   return n
 }
+
+export const tankL = (data) => Number(data.settings?.tankL) > 0 ? Number(data.settings.tankL) : 120

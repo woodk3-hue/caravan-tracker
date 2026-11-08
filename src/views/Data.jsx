@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import { Download, Upload, Trash2 } from 'lucide-react'
-import { Header } from '../ui.jsx'
+import { Header, Field } from '../ui.jsx'
 import { exportJson, validateImport, emptyData } from '../storage.js'
+import { tankL } from '../util.js'
 
-export default function Data({ data, replace }) {
+export default function Data({ data, update, replace }) {
   const file = useRef()
   const [msg, setMsg] = useState(null)
 
@@ -25,6 +26,13 @@ export default function Data({ data, replace }) {
   return (
     <>
       <Header title="Data & backup" />
+      <div className="card mb-3">
+        <Field label="Vehicle fuel tank size (litres)">
+          <input type="number" inputMode="decimal" min="1" className="input" value={data.settings?.tankL ?? 120}
+            onChange={e => { const v = e.target.value; update(d => { d.settings = { ...d.settings, tankL: v === '' ? '' : Number(v) } }) }} />
+        </Field>
+        <p className="text-xs text-slate-500 mt-1">Fill-ups larger than this are flagged. Currently {tankL(data)} L.</p>
+      </div>
       <div className="card space-y-3">
         <p className="text-sm text-slate-500">All data is stored on this device only. Export regularly to keep a backup.</p>
         <p className="text-sm">{data.legs.length} legs · {data.fuel.length} fuel entries · {data.sites.length} sites</p>
