@@ -1,8 +1,10 @@
-import { Route, Fuel, Wrench, Flag } from 'lucide-react'
-import { Header } from '../ui.jsx'
+import { useState } from 'react'
+import { Route, Fuel, Wrench, Flag, Pencil } from 'lucide-react'
+import { Header, Field, Sheet } from '../ui.jsx'
 import { legDistance, nf, currentOdo, maintStatus, fmtDate } from '../util.js'
 
 export default function Dashboard({ data, update, go }) {
+  const [editTrip, setEditTrip] = useState(false)
   const towing = data.legs.filter(l => l.towing)
   const lifetime = towing.reduce((s, l) => s + legDistance(l), 0)
   const start = new Date(data.trip.startedAt)
@@ -37,7 +39,9 @@ export default function Dashboard({ data, update, go }) {
 
       <div className="card mb-3">
         <div className="flex justify-between items-center mb-2">
-          <h2 className="font-semibold">{data.trip.name}</h2>
+          <h2 className="font-semibold flex items-center gap-1">{data.trip.name}
+            <button aria-label="Edit trip" className="p-1 text-slate-400" onClick={() => setEditTrip(true)}><Pencil size={14} /></button>
+          </h2>
           <button className="text-sm text-teal-600 dark:text-teal-400 flex items-center gap-1" onClick={newTrip}><Flag size={14} />New trip</button>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
@@ -47,6 +51,9 @@ export default function Dashboard({ data, update, go }) {
         {litres > 0 && dist > 0 && <p className="text-sm text-slate-500 mt-2 text-center">{nf(litres / dist * 100, 1)} L/100km · ${nf(cost, 2)} spent</p>}
         {litres > 0 && kwh > 0 && <p className="text-sm text-slate-500 text-center">+ {nf(kwh, 1)} kWh</p>}
       </div>
+
+      {editTrip && <TripForm trip={data.trip} onClose={() => setEditTrip(false)}
+        onSave={t => { update(d => { d.trip = t }); setEditTrip(false) }} />}
 
       <div className="grid grid-cols-3 gap-2 mb-3">
         <Quick icon={Route} label="Start trip leg" onClick={() => go('legs', 'new')} />
@@ -70,3 +77,19 @@ const Quick = ({ icon: Icon, label, onClick }) => (
     <Icon className="text-teal-600 dark:text-teal-400" />{label}
   </button>
 )
+
+function TripForm({ trip, onClose, onSave }) {
+  const toLocal = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
+  const [name, setName] = useState(trip.name)
+  const [start, setStart] = useState(toLocal(trip.startedAt))
+  return (
+    <Sheet title="Current trip" onClose={onClose}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); start && onSave({ name: name.trim() || 'Current trip', startedAt: new Date(start + 'T00:00:00').toISOString() }) }}>
+        <Field label="Trip name"><input className="input" value={name} onChange={e => setName(e.target.value)} /></Field>
+        <Field label="Trip start date"><input type="date" className="input" value={start} onChange={e => setStart(e.target.value)} required /></Field>
+        <p className="text-xs text-slate-500">Legs and fuel entries dated on or after this day count towards the current trip.</p>
+        <button className="btn w-full">Save trip</button>
+      </form>
+    </Sheet>
+  )
+}
