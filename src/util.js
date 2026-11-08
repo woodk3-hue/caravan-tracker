@@ -1,0 +1,34 @@
+export const nowLocal = () => {
+  const d = new Date()
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 16)
+}
+export const fmtDate = (s) => s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+export const fmtDateTime = (s) => s ? new Date(s).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+export const num = (v) => (v === '' || v == null ? NaN : Number(v))
+export const nf = (n, d = 0) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: d })
+
+export const legDistance = (l) => Math.max(0, l.odoEnd - l.odoStart)
+
+export function currentOdo(data) {
+  let m = 0
+  data.legs.forEach(l => { m = Math.max(m, l.odoEnd || 0) })
+  data.fuel.forEach(f => { m = Math.max(m, f.odo || 0) })
+  data.maintenance.forEach(i => i.history.forEach(h => { m = Math.max(m, h.odo || 0) }))
+  return m
+}
+
+export function maintStatus(item, odo) {
+  const last = item.history[0]
+  const base = last ?? null
+  let kmLeft = null, daysLeft = null
+  if (item.intervalKm) kmLeft = (base ? base.odo + item.intervalKm : item.intervalKm) - odo
+  if (item.intervalMonths && base) {
+    const due = new Date(base.date)
+    due.setMonth(due.getMonth() + item.intervalMonths)
+    daysLeft = Math.round((due - new Date()) / 864e5)
+  }
+  const overdue = (kmLeft != null && kmLeft < 0) || (daysLeft != null && daysLeft < 0)
+  const soon = (kmLeft != null && kmLeft < item.intervalKm * 0.1) || (daysLeft != null && daysLeft < 14)
+  return { kmLeft, daysLeft, level: overdue ? 'overdue' : soon ? 'soon' : 'ok' }
+}
