@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2, Star, MapPin, Crosshair } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
 import { nowLocal, fmtDate } from '../util.js'
 import { uid } from '../storage.js'
@@ -25,25 +26,28 @@ export default function Sites({ data, update }) {
             {s.location && <p className="text-sm flex items-center gap-1"><MapPin size={14} />{s.location}</p>}
             {s.amenities.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{s.amenities.map(a => <span key={a} className="text-xs px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200">{a}</span>)}</div>}
             {s.notes && <p className="text-sm mt-1">{s.notes}</p>}
-            <button aria-label="Delete" className="mt-1 text-slate-400" onClick={() => del(s.id)}><Trash2 size={16} /></button>
+            <div className="flex gap-4 mt-1 text-slate-400">
+              <button aria-label="Edit" className="p-1" onClick={() => setOpen(s)}><Pencil size={16} /></button>
+              <button aria-label="Delete" className="p-1" onClick={() => del(s.id)}><Trash2 size={16} /></button>
+            </div>
           </div>
         ))}
       </div>
-      {open && <SiteForm onClose={() => setOpen(false)} onSave={s => { update(d => { d.sites.push(s) }); setOpen(false) }} />}
+      {open && <SiteForm initial={open === true ? null : open} onClose={() => setOpen(false)} onSave={s => { update(d => { const i = d.sites.findIndex(x => x.id === s.id); if (i >= 0) d.sites[i] = s; else d.sites.push(s) }); setOpen(false) }} />}
     </>
   )
 }
 
-function SiteForm({ onClose, onSave }) {
-  const [f, setF] = useState({ name: '', date: nowLocal().slice(0, 10), location: '', amenities: [], rating: 0, notes: '' })
+function SiteForm({ initial, onClose, onSave }) {
+  const [f, setF] = useState(initial ?? { name: '', date: nowLocal().slice(0, 10), location: '', amenities: [], rating: 0, notes: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const toggle = (a) => setF({ ...f, amenities: f.amenities.includes(a) ? f.amenities.filter(x => x !== a) : [...f.amenities, a] })
   const gps = () => navigator.geolocation?.getCurrentPosition(
     p => setF(x => ({ ...x, location: `${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}` })),
     () => alert('Could not get location'))
   return (
-    <Sheet title="New campsite" onClose={onClose}>
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); f.name.trim() && onSave({ id: uid(), ...f, name: f.name.trim() }) }}>
+    <Sheet title={initial ? 'Edit campsite' : 'New campsite'} onClose={onClose}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); f.name.trim() && onSave({ ...f, id: initial?.id ?? uid(), name: f.name.trim() }) }}>
         <Field label="Name"><input className="input" value={f.name} onChange={set('name')} required /></Field>
         <Field label="Date visited"><input type="date" className="input" value={f.date} onChange={set('date')} /></Field>
         <Field label="Coordinates / location notes">

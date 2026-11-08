@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, Zap, Fuel } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
 import { nowLocal, num, nf, fmtDateTime, currentOdo } from '../util.js'
 import { uid } from '../storage.js'
@@ -21,19 +22,24 @@ export default function FuelLog({ data, update, openForm, clearForm }) {
               <p className="font-semibold flex items-center gap-1">{x.kwh ? <Zap size={16} /> : <Fuel size={16} />}{x.kwh ? `${nf(x.kwh, 1)} kWh` : `${nf(x.litres, 1)} L`}</p>
               <p className="text-xs text-slate-500">{fmtDateTime(x.date)} · ODO {nf(x.odo)}</p>
               {x.location && <p className="text-sm">{x.location}</p>}
-              <button aria-label="Delete" className="mt-1 text-slate-400" onClick={() => del(x.id)}><Trash2 size={16} /></button>
+              <div className="flex gap-4 mt-1 text-slate-400">
+                <button aria-label="Edit" className="p-1" onClick={() => setOpen(x)}><Pencil size={16} /></button>
+                <button aria-label="Delete" className="p-1" onClick={() => del(x.id)}><Trash2 size={16} /></button>
+              </div>
             </div>
             <p className="text-lg font-bold">${nf(x.cost, 2)}</p>
           </div>
         ))}
       </div>
-      {open && <FuelForm data={data} onClose={() => setOpen(false)} onSave={e => { update(d => { d.fuel.push(e) }); setOpen(false) }} />}
+      {open && <FuelForm data={data} initial={open === true ? null : open} onClose={() => setOpen(false)} onSave={e => { update(d => { const i = d.fuel.findIndex(x => x.id === e.id); if (i >= 0) d.fuel[i] = e; else d.fuel.push(e) }); setOpen(false) }} />}
     </>
   )
 }
 
-function FuelForm({ data, onClose, onSave }) {
-  const [f, setF] = useState({ date: nowLocal(), odo: currentOdo(data) || '', type: 'fuel', amount: '', cost: '', location: '' })
+function FuelForm({ data, initial, onClose, onSave }) {
+  const [f, setF] = useState(initial
+    ? { date: initial.date, odo: initial.odo, type: initial.kwh ? 'power' : 'fuel', amount: initial.kwh ?? initial.litres, cost: initial.cost || '', location: initial.location || '' }
+    : { date: nowLocal(), odo: currentOdo(data) || '', type: 'fuel', amount: '', cost: '', location: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const odo = num(f.odo), amt = num(f.amount), cost = num(f.cost)
   const odoErr = f.odo !== '' && odo < 0 ? 'Must be positive' : ''
@@ -41,11 +47,11 @@ function FuelForm({ data, onClose, onSave }) {
   const submit = (ev) => {
     ev.preventDefault()
     if (!valid) return
-    onSave({ id: uid(), date: f.date, odo, cost: isNaN(cost) ? 0 : cost, location: f.location,
+    onSave({ id: initial?.id ?? uid(), date: f.date, odo, cost: isNaN(cost) ? 0 : cost, location: f.location,
       ...(f.type === 'fuel' ? { litres: amt } : { kwh: amt }) })
   }
   return (
-    <Sheet title="Log fuel / power" onClose={onClose}>
+    <Sheet title={initial ? 'Edit entry' : 'Log fuel / power'} onClose={onClose}>
       <form className="space-y-3" onSubmit={submit}>
         <div className="grid grid-cols-2 gap-2">
           {[['fuel', 'Fuel (L)'], ['power', 'Power (kWh)']].map(([v, l]) => (

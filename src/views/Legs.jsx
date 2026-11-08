@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, Truck, Car } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
 import { nowLocal, num, nf, fmtDateTime, legDistance, currentOdo } from '../util.js'
 import { uid } from '../storage.js'
@@ -29,18 +30,21 @@ export default function Legs({ data, update, openForm, clearForm }) {
             </div>
             <p className="text-xs text-slate-500 mt-1">ODO {nf(l.odoStart)} → {nf(l.odoEnd)}</p>
             {l.notes && <p className="text-sm mt-1">{l.notes}</p>}
-            <button aria-label="Delete" className="mt-1 text-slate-400" onClick={() => del(l.id)}><Trash2 size={16} /></button>
+            <div className="flex gap-4 mt-1 text-slate-400">
+              <button aria-label="Edit" className="p-1" onClick={() => setOpen(l)}><Pencil size={16} /></button>
+              <button aria-label="Delete" className="p-1" onClick={() => del(l.id)}><Trash2 size={16} /></button>
+            </div>
           </div>
         ))}
       </div>
-      {open && <LegForm data={data} onClose={() => setOpen(false)}
-        onSave={leg => { update(d => { d.legs.push(leg) }); setOpen(false) }} />}
+      {open && <LegForm data={data} initial={open === true ? null : open} onClose={() => setOpen(false)}
+        onSave={leg => { update(d => { const i = d.legs.findIndex(x => x.id === leg.id); if (i >= 0) d.legs[i] = leg; else d.legs.push(leg) }); setOpen(false) }} />}
     </>
   )
 }
 
-function LegForm({ data, onClose, onSave }) {
-  const [f, setF] = useState({
+function LegForm({ data, initial, onClose, onSave }) {
+  const [f, setF] = useState(initial ?? {
     date: nowLocal(), odoStart: currentOdo(data) || '', odoEnd: '', from: '', to: '', towing: true, notes: ''
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -51,8 +55,8 @@ function LegForm({ data, onClose, onSave }) {
   const dist = valid ? e - s : null
 
   return (
-    <Sheet title="New trip leg" onClose={onClose}>
-      <form className="space-y-3" onSubmit={ev => { ev.preventDefault(); valid && onSave({ id: uid(), ...f, odoStart: s, odoEnd: e }) }}>
+    <Sheet title={initial ? 'Edit trip leg' : 'New trip leg'} onClose={onClose}>
+      <form className="space-y-3" onSubmit={ev => { ev.preventDefault(); valid && onSave({ ...f, id: initial?.id ?? uid(), odoStart: s, odoEnd: e }) }}>
         <Field label="Date & time"><input type="datetime-local" className="input" value={f.date} onChange={set('date')} required /></Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Start ODO (km)" error={startErr}><input type="number" inputMode="decimal" className={`input ${startErr ? 'input-err' : ''}`} value={f.odoStart} onChange={set('odoStart')} required /></Field>
