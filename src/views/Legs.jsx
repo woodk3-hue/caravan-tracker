@@ -2,15 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2, Truck, Car } from 'lucide-react'
 import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
-import { nowLocal, num, nf, fmtDateTime, fmtDate, legDistance, currentOdo } from '../util.js'
+import { nowLocal, num, nf, fmtDateTime, fmtDate, legDistance, currentOdo, renumber } from '../util.js'
 import { uid } from '../storage.js'
-
-// Caravan has no odometer: running total is the sum of leg distances in date order
-function renumber(legs) {
-  legs.sort((a, b) => a.date.localeCompare(b.date))
-  let t = 0
-  legs.forEach(l => { const km = legDistance(l); l.odoStart = t; l.odoEnd = t + km; t += km })
-}
 
 export default function Legs({ data, update, openForm, clearForm }) {
   const [open, setOpen] = useState(false)

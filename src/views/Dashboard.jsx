@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Route, Fuel, Wrench, Flag, Pencil, Moon, Play } from 'lucide-react'
 import { Header, Field, Sheet } from '../ui.jsx'
-import { legDistance, nf, currentOdo, maintStatus, fmtDate, num } from '../util.js'
+import { legDistance, nf, currentOdo, maintStatus, fmtDate, num, renumber } from '../util.js'
 import { uid } from '../storage.js'
 
 const toDay = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
@@ -30,7 +30,21 @@ export default function Dashboard({ data, update, go }) {
   const odo = currentOdo(data)
   const due = data.maintenance.filter(i => maintStatus(i, odo).level !== 'ok')
 
-  const endTrip = () => confirm('End this trip? Your data is kept.') && update(d => { d.trip.active = false; if (!d.trip.endDate) d.trip.endDate = toDay(new Date().toISOString()) })
+  const endTrip = () => {
+    const needReturn = trip.returnTrip && trip.legKm > 0 && !trip.returnLegAdded
+    const addReturn = needReturn && confirm(`End trip and add the ${nf(trip.legKm)} km return leg ${trip.to || ''} → ${trip.from || ''}?\n\nOK = add return leg, Cancel = choose again`)
+    if (needReturn && !addReturn && !confirm('End trip WITHOUT adding the return leg?')) return
+    if (!needReturn && !confirm('End this trip? Your data is kept.')) return
+    update(d => {
+      d.trip.active = false
+      if (!d.trip.endDate) d.trip.endDate = toDay(new Date().toISOString())
+      if (addReturn) {
+        d.legs.push({ id: uid(), date: d.trip.endDate + 'T08:00', from: d.trip.to || '', to: d.trip.from || '', towing: true, notes: 'Return leg', odoStart: 0, odoEnd: d.trip.legKm })
+        d.trip.returnLegAdded = true
+        renumber(d.legs)
+      }
+    })
+  }
 
   return (
     <>
@@ -68,8 +82,8 @@ export default function Dashboard({ data, update, go }) {
         )}
       </div>
 
-      {form === 'start' && <StartTrip odo={odo} onClose={() => setForm(null)} onSave={({ trip: t, fill }) => {
-        update(d => { d.trip = t; if (fill) d.fuel.push(fill) }); setForm(null)
+      {form === 'start' && <StartTrip odo={odo} onClose={() => setForm(null)} onSave={({ trip: t, fill, legs }) => {
+        update(d => { d.trip = t; if (fill) d.fuel.push(fill); legs.forEach(l => d.legs.push(l)); if (legs.length) renumber(d.legs) }); setForm(null)
       }} />}
       {form === 'edit' && <EditTrip trip={trip} onClose={() => setForm(null)} onSave={t => { update(d => { d.trip = { ...d.trip, ...t } }); setForm(null) }} />}
 
@@ -99,7 +113,7 @@ const Quick = ({ icon: Icon, label, onClick, hi }) => (
 
 function StartTrip({ odo, onClose, onSave }) {
   const today = toDay(new Date().toISOString())
-  const [f, setF] = useState({ name: '', date: today, endDate: '', returnTrip: true, odo: odo || '', from: '', to: '', litres: '', cost: '', station: '' })
+  const [f, setF] = useState({ name: '', date: today, endDate: '', km: '', returnTrip: true, odo: odo || '', from: '', to: '', litres: '', cost: '', station: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const o = num(f.odo), l = num(f.litres), c = num(f.cost)
   const odoErr = f.odo !== '' && o < 0 ? 'Must be positive' : ''
@@ -107,8 +121,15 @@ function StartTrip({ odo, onClose, onSave }) {
   const valid = f.date && !odoErr && !dateErr && (f.litres === '' || l > 0)
   const submit = (e) => {
     e.preventDefault(); if (!valid) return
+    const km = num(f.km), legs = []
+    const from = f.from.trim(), to = f.to.trim()
+    if (km > 0) {
+      legs.push({ id: uid(), date: f.date + 'T08:00', from, to, towing: true, notes: '', odoStart: 0, odoEnd: km })
+      if (f.returnTrip && f.endDate) legs.push({ id: uid(), date: f.endDate + 'T08:00', from: to, to: from, towing: true, notes: 'Return leg', odoStart: 0, odoEnd: km })
+    }
     onSave({
-      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, endDate: f.endDate, returnTrip: f.returnTrip, from: f.from.trim(), to: f.to.trim() },
+      legs,
+      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, endDate: f.endDate, returnTrip: f.returnTrip, legKm: km > 0 ? km : 0, returnLegAdded: km > 0 && !!f.returnTrip && !!f.endDate, from, to },
       fill: l > 0 ? { id: uid(), date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, location: f.station } : null
     })
   }
@@ -126,6 +147,10 @@ function StartTrip({ odo, onClose, onSave }) {
           <Field label="Going to"><input className="input" value={f.to} onChange={set('to')} /></Field>
         </div>
         <Toggle value={f.returnTrip} onChange={v => setF({ ...f, returnTrip: v })} />
+        <Field label="Distance one way (km)"><input type="number" inputMode="decimal" step="any" className="input" value={f.km} onChange={set('km')} /></Field>
+        {num(f.km) > 0 && <p className="text-sm text-center text-teal-600 dark:text-teal-400 font-medium">
+          {f.returnTrip ? (f.endDate ? `Adds 2 legs: ${nf(num(f.km))} km out + ${nf(num(f.km))} km back = ${nf(num(f.km) * 2)} km` : `Adds ${nf(num(f.km))} km now; the ${nf(num(f.km))} km return is added when you tap End trip`) : `Adds one leg of ${nf(num(f.km))} km`}
+        </p>}
         <p className="label !mb-0 pt-1">Tank fill-up at start (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={set('litres')} /></Field>

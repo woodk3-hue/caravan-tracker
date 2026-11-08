@@ -32,3 +32,10 @@ export function maintStatus(item, odo) {
   const soon = (kmLeft != null && kmLeft < item.intervalKm * 0.1) || (daysLeft != null && daysLeft < 14)
   return { kmLeft, daysLeft, level: overdue ? 'overdue' : soon ? 'soon' : 'ok' }
 }
+
+// Caravan has no odometer: running total is the sum of leg distances in date order
+export function renumber(legs) {
+  legs.sort((a, b) => a.date.localeCompare(b.date))
+  let t = 0
+  legs.forEach(l => { const km = legDistance(l); l.odoStart = t; l.odoEnd = t + km; t += km })
+}
