@@ -30,6 +30,12 @@ export default function Dashboard({ data, update, go }) {
   const econ = fuelEconomy(data)
   const lastEcon = [...data.fuel].sort((a, b) => b.date.localeCompare(a.date)).map(x => econ[x.id]).find(Boolean)
   const tank = tankL(data)
+  // Tank was filled to full at the start, so fuel used = full tank + refills during the trip - fuel left at the end
+  const fillsT = tf.filter(f => f.litres > 0).sort((a, b) => a.date.localeCompare(b.date))
+  const hasLeft = trip.fuelLeft !== undefined && trip.fuelLeft !== '' && trip.fuelLeft !== null && !isNaN(Number(trip.fuelLeft))
+  const canUse = tank > 0 && fillsT.length > 0 && hasLeft && fillsT[0].full !== false
+  const refilled = canUse ? litres - fillsT[0].litres : 0
+  const used = canUse ? Math.max(0, tank + refilled - Number(trip.fuelLeft)) : null
   const stayCost = stops.reduce((s, x) => s + (Number(x.cost) || 0), 0)
   const odo = currentOdo(data)
   const due = data.maintenance.filter(i => maintStatus(i, odo).level !== 'ok')
@@ -39,7 +45,13 @@ export default function Dashboard({ data, update, go }) {
     const addReturn = needReturn && confirm(`End trip and add the ${nf(trip.legKm)} km return leg ${trip.to || ''} → ${trip.from || ''}?\n\nOK = add return leg, Cancel = choose again`)
     if (needReturn && !addReturn && !confirm('End trip WITHOUT adding the return leg?')) return
     if (!needReturn && !confirm('End this trip? Your data is kept.')) return
+    let left = null
+    if (tankL(data) > 0 && (trip.fuelLeft === undefined || trip.fuelLeft === '')) {
+      const a = prompt(`How many litres are left in your tank now? (Tank size ${tankL(data)} L. Leave blank to skip.)`)
+      if (a !== null && a.trim() !== '' && Number(a) >= 0) left = Number(a)
+    }
     update(d => {
+      if (left !== null) d.trip.fuelLeft = left
       d.trip.active = false
       if (!d.trip.endDate) d.trip.endDate = toDay(new Date().toISOString())
       if (addReturn) {
@@ -76,9 +88,11 @@ export default function Dashboard({ data, update, go }) {
         </p>
         <div className="grid grid-cols-3 gap-2 text-center">
           <Stat v={nf(dist)} l="km" /><Stat v={days} l="active days" />
-          <Stat v={litres ? `${nf(litres, 1)} L` : kwh ? `${nf(kwh, 1)} kWh` : '–'} l="fuel/energy" />
+          <Stat v={used !== null ? `${nf(used, 1)} L` : litres ? `${nf(litres, 1)} L` : kwh ? `${nf(kwh, 1)} kWh` : '–'} l={used !== null ? 'fuel used' : litres ? 'fuel bought' : 'fuel/energy'} />
         </div>
-        {litres > 0 && dist > 0 && <p className="text-sm text-slate-500 mt-2 text-center">{nf(litres / dist * 100, 1)} L/100km · ${nf(cost, 2)} spent</p>}        {lastEcon && <p className="text-sm text-slate-500 text-center">Last full fill-up: {nf(lastEcon, 1)} L/100km{tank > 0 ? ` · ~${nf(tank / lastEcon * 100)} km per tank` : ''}</p>}
+        {used !== null && <p className="text-sm text-slate-500 mt-2 text-center">{dist > 0 ? `${nf(used / dist * 100, 1)} L/100km · ` : ''}${nf(cost, 2)} spent</p>}
+        {used !== null && <p className="text-xs text-slate-500 text-center">Full tank {nf(tank)} L{refilled > 0 ? ` + ${nf(refilled, 1)} L refilled` : ''} − {nf(Number(trip.fuelLeft), 1)} L left</p>}
+        {used === null && litres > 0 && <p className="text-xs text-slate-500 mt-2 text-center">${nf(cost, 2)} spent · {tank > 0 ? 'Add fuel left in tank (pencil) to see fuel used and economy' : 'Set tank size (Data tab) and fuel left (pencil) to see fuel used'}</p>}        {lastEcon && <p className="text-sm text-slate-500 text-center">Last full fill-up: {nf(lastEcon, 1)} L/100km{tank > 0 ? ` · ~${nf(tank / lastEcon * 100)} km per tank` : ''}</p>}
         {stayCost > 0 && <p className="text-sm text-slate-500 text-center">${nf(stayCost, 2)} paid for stays</p>}
         {litres > 0 && kwh > 0 && <p className="text-sm text-slate-500 text-center">+ {nf(kwh, 1)} kWh</p>}
         {stops.length > 0 && (
@@ -205,6 +219,7 @@ function applyTripEdit(d, f) {
       d.legs = d.legs.filter(x => x !== ret); t.returnLegId = ''
     }
   }
+  t.fuelLeft = f.fuelLeft === '' || isNaN(num(f.fuelLeft)) ? '' : num(f.fuelLeft)
   t.returnLegAdded = d.legs.some(x => x.id === t.returnLegId)
   // Remove exact copies of the trip's legs left by earlier edits
   const same = (a, b) => (a.from || '') === (b.from || '') && (a.to || '') === (b.to || '') && a.date.slice(0, 10) === b.date.slice(0, 10) && legDistance(a) === legDistance(b)
@@ -225,7 +240,7 @@ function EditTrip({ trip, data, odo, onClose, onSave }) {
   const fill = data.fuel.find(x => x.id === trip.fillId)
   const [f, setF] = useState({
     name: trip.name, date: toDay(trip.startedAt), endDate: trip.endDate || '', returnTrip: trip.returnTrip ?? true,
-    from: trip.from || '', to: trip.to || '',
+    from: trip.from || '', to: trip.to || '', fuelLeft: trip.fuelLeft ?? '',
     km: out ? legDistance(out) : (trip.legKm || ''),
     odo: fill?.odo ?? (odo || ''), litres: fill?.litres ?? '', cost: fill?.cost || '',
     ppl: fill?.ppl ?? (fill?.litres && fill?.cost ? +(fill.cost / fill.litres).toFixed(3) : ''), station: fill?.location || ''
@@ -256,6 +271,7 @@ function EditTrip({ trip, data, odo, onClose, onSave }) {
         </div>
         <Field label="Price per litre ($/L, optional)"><input type="number" inputMode="decimal" step="any" className="input" placeholder="e.g. 2.149" value={f.ppl} onChange={setLinked('ppl')} /></Field>
         <Field label="Fuel station"><input className="input" value={f.station} onChange={set('station')} /></Field>
+        <Field label="Fuel left in tank at end of trip (litres, optional)"><input type="number" inputMode="decimal" step="any" min="0" className="input" placeholder="e.g. 35" value={f.fuelLeft} onChange={set('fuelLeft')} /></Field>
         <p className="text-xs text-slate-500">Saving updates this trip's legs and first fill-up (in the Legs and Fuel tabs). Extra fill-ups are edited in the Fuel tab.</p>
         <button className="btn w-full" disabled={!valid}>Save trip</button>
       </form>
