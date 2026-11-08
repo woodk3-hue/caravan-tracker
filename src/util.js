@@ -39,3 +39,16 @@ export function renumber(legs) {
   let t = 0
   legs.forEach(l => { const km = legDistance(l); l.odoStart = t; l.odoEnd = t + km; t += km })
 }
+
+// Keeps litres, total cost and price-per-litre in step as the user types
+export function linkFuel(f, key, value, litresKey = 'litres') {
+  const n = { ...f, [key]: value }
+  const L = num(n[litresKey]), C = num(n.cost), P = num(n.ppl)
+  if (key === 'ppl') { if (L > 0 && P >= 0) n.cost = String(+(L * P).toFixed(2)) }
+  else if (key === 'cost') { if (L > 0 && C >= 0) n.ppl = String(+(C / L).toFixed(3)) }
+  else if (key === litresKey && L > 0) {
+    if (n.cost !== '' && C >= 0) n.ppl = String(+(C / L).toFixed(3))
+    else if (n.ppl !== '' && P >= 0) n.cost = String(+(L * P).toFixed(2))
+  }
+  return n
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Route, Fuel, Wrench, Flag, Pencil, Moon, Play } from 'lucide-react'
 import { Header, Field, Sheet } from '../ui.jsx'
-import { legDistance, nf, currentOdo, maintStatus, fmtDate, num, renumber } from '../util.js'
+import { legDistance, nf, currentOdo, maintStatus, fmtDate, num, renumber, linkFuel } from '../util.js'
 import { uid } from '../storage.js'
 
 const toDay = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
@@ -117,8 +117,9 @@ const Quick = ({ icon: Icon, label, onClick, hi }) => (
 
 function StartTrip({ odo, onClose, onSave }) {
   const today = toDay(new Date().toISOString())
-  const [f, setF] = useState({ name: '', date: today, endDate: '', km: '', returnTrip: true, odo: odo || '', from: '', to: '', litres: '', cost: '', station: '' })
+  const [f, setF] = useState({ name: '', date: today, endDate: '', km: '', returnTrip: true, odo: odo || '', from: '', to: '', litres: '', cost: '', ppl: '', station: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const setLinked = (k) => (e) => setF(linkFuel(f, k, e.target.value))
   const o = num(f.odo), l = num(f.litres), c = num(f.cost)
   const odoErr = f.odo !== '' && o < 0 ? 'Must be positive' : ''
   const dateErr = f.endDate && f.endDate < f.date ? 'End date cannot be before start date' : ''
@@ -135,7 +136,7 @@ function StartTrip({ odo, onClose, onSave }) {
     onSave({
       legs,
       trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, endDate: f.endDate, returnTrip: f.returnTrip, legKm: km > 0 ? km : 0, returnLegAdded: km > 0 && !!f.returnTrip && !!f.endDate, outLegId: km > 0 ? outId : '', returnLegId: km > 0 && f.returnTrip && f.endDate ? retId : '', fillId: l > 0 ? fillId : '', from, to },
-      fill: l > 0 ? { id: fillId, date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, location: f.station } : null
+      fill: l > 0 ? { id: fillId, date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, ...(num(f.ppl) >= 0 ? { ppl: num(f.ppl) } : {}), location: f.station } : null
     })
   }
   return (
@@ -158,9 +159,10 @@ function StartTrip({ odo, onClose, onSave }) {
         </p>}
         <p className="label !mb-0 pt-1">Tank fill-up at start (optional)</p>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={set('litres')} /></Field>
-          <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={set('cost')} /></Field>
+          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={setLinked('litres')} /></Field>
+          <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={setLinked('cost')} /></Field>
         </div>
+        <Field label="Price per litre ($/L, optional)"><input type="number" inputMode="decimal" step="any" className="input" placeholder="e.g. 2.149" value={f.ppl} onChange={setLinked('ppl')} /></Field>
         <Field label="Fuel station"><input className="input" value={f.station} onChange={set('station')} /></Field>
         <button className="btn w-full" disabled={!valid}>Start trip</button>
       </form>
@@ -191,6 +193,7 @@ function applyTripEdit(d, f) {
     let fill = d.fuel.find(x => x.id === t.fillId)
     if (!fill) { fill = { id: uid(), odo: f.odo === '' ? 0 : num(f.odo) }; d.fuel.push(fill); t.fillId = fill.id }
     Object.assign(fill, { date: f.date + 'T08:00', litres: l, cost: isNaN(c) ? 0 : c, location: f.station })
+    if (num(f.ppl) >= 0) fill.ppl = num(f.ppl)
   }
   renumber(d.legs)
 }
@@ -202,9 +205,11 @@ function EditTrip({ trip, data, odo, onClose, onSave }) {
     name: trip.name, date: toDay(trip.startedAt), endDate: trip.endDate || '', returnTrip: trip.returnTrip ?? true,
     from: trip.from || '', to: trip.to || '',
     km: out ? legDistance(out) : (trip.legKm || ''),
-    odo: fill?.odo ?? (odo || ''), litres: fill?.litres ?? '', cost: fill?.cost || '', station: fill?.location || ''
+    odo: fill?.odo ?? (odo || ''), litres: fill?.litres ?? '', cost: fill?.cost || '',
+    ppl: fill?.ppl ?? (fill?.litres && fill?.cost ? +(fill.cost / fill.litres).toFixed(3) : ''), station: fill?.location || ''
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const setLinked = (k) => (e) => setF(linkFuel(f, k, e.target.value))
   const dateErr = f.endDate && f.endDate < f.date ? 'End date cannot be before start date' : ''
   const kmErr = f.km !== '' && !(num(f.km) > 0) ? 'Must be greater than 0' : ''
   const valid = f.date && !dateErr && !kmErr && (f.litres === '' || num(f.litres) > 0)
@@ -224,9 +229,10 @@ function EditTrip({ trip, data, odo, onClose, onSave }) {
         <Field label="Distance one way (km)" error={kmErr}><input type="number" inputMode="decimal" step="any" className={`input ${kmErr ? 'input-err' : ''}`} value={f.km} onChange={set('km')} /></Field>
         <p className="label !mb-0 pt-1">Tank fill-up at start</p>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={set('litres')} /></Field>
-          <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={set('cost')} /></Field>
+          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={setLinked('litres')} /></Field>
+          <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={setLinked('cost')} /></Field>
         </div>
+        <Field label="Price per litre ($/L, optional)"><input type="number" inputMode="decimal" step="any" className="input" placeholder="e.g. 2.149" value={f.ppl} onChange={setLinked('ppl')} /></Field>
         <Field label="Fuel station"><input className="input" value={f.station} onChange={set('station')} /></Field>
         <p className="text-xs text-slate-500">Saving updates this trip's legs and first fill-up (in the Legs and Fuel tabs). Extra fill-ups are edited in the Fuel tab.</p>
         <button className="btn w-full" disabled={!valid}>Save trip</button>
