@@ -23,7 +23,7 @@ export default function Sites({ data, update, openForm, clearForm }) {
               <p className="font-semibold">{s.name}</p>
               <p className="flex">{[1, 2, 3, 4, 5].map(n => <Star key={n} size={14} className={n <= s.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300 dark:text-slate-700'} />)}</p>
             </div>
-            <p className="text-xs text-slate-500">{fmtDate(s.date)}</p>
+            <p className="text-xs text-slate-500">{fmtDate(s.date)}{s.cost ? ` · $${Number(s.cost).toLocaleString(undefined, { minimumFractionDigits: 2 })} paid` : ''}</p>
             {s.location && <p className="text-sm flex items-center gap-1"><MapPin size={14} />{s.location}</p>}
             {s.amenities.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{s.amenities.map(a => <span key={a} className="text-xs px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200">{a}</span>)}</div>}
             {s.notes && <p className="text-sm mt-1">{s.notes}</p>}
@@ -40,7 +40,7 @@ export default function Sites({ data, update, openForm, clearForm }) {
 }
 
 function SiteForm({ initial, onClose, onSave }) {
-  const [f, setF] = useState(initial ?? { name: '', date: nowLocal().slice(0, 10), location: '', amenities: [], rating: 0, notes: '' })
+  const [f, setF] = useState(initial ? { cost: '', ...initial } : { name: '', date: nowLocal().slice(0, 10), cost: '', location: '', amenities: [], rating: 0, notes: '' })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const toggle = (a) => setF({ ...f, amenities: f.amenities.includes(a) ? f.amenities.filter(x => x !== a) : [...f.amenities, a] })
   const gps = () => navigator.geolocation?.getCurrentPosition(
@@ -48,9 +48,10 @@ function SiteForm({ initial, onClose, onSave }) {
     () => alert('Could not get location'))
   return (
     <Sheet title={initial ? 'Edit campsite' : 'New campsite'} onClose={onClose}>
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); f.name.trim() && onSave({ ...f, id: initial?.id ?? uid(), name: f.name.trim() }) }}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); f.name.trim() && onSave({ ...f, cost: f.cost === '' || isNaN(Number(f.cost)) ? '' : Number(f.cost), id: initial?.id ?? uid(), name: f.name.trim() }) }}>
         <Field label="Name"><input className="input" value={f.name} onChange={set('name')} required /></Field>
         <Field label="Date visited"><input type="date" className="input" value={f.date} onChange={set('date')} /></Field>
+        <Field label="Price paid to stay ($, optional)"><input type="number" inputMode="decimal" step="any" min="0" className="input" value={f.cost} onChange={set('cost')} /></Field>
         <Field label="Coordinates / location notes">
           <div className="flex gap-2">
             <input className="input" value={f.location} onChange={set('location')} />

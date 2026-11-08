@@ -27,6 +27,7 @@ export default function Dashboard({ data, update, go }) {
   const litres = tf.reduce((s, f) => s + (f.litres || 0), 0)
   const kwh = tf.reduce((s, f) => s + (f.kwh || 0), 0)
   const cost = tf.reduce((s, f) => s + (f.cost || 0), 0)
+  const stayCost = stops.reduce((s, x) => s + (Number(x.cost) || 0), 0)
   const odo = currentOdo(data)
   const due = data.maintenance.filter(i => maintStatus(i, odo).level !== 'ok')
 
@@ -39,8 +40,10 @@ export default function Dashboard({ data, update, go }) {
       d.trip.active = false
       if (!d.trip.endDate) d.trip.endDate = toDay(new Date().toISOString())
       if (addReturn) {
-        d.legs.push({ id: uid(), date: d.trip.endDate + 'T08:00', from: d.trip.to || '', to: d.trip.from || '', towing: true, notes: 'Return leg', odoStart: 0, odoEnd: d.trip.legKm })
+        const rid = uid()
+        d.legs.push({ id: rid, date: d.trip.endDate + 'T08:00', from: d.trip.to || '', to: d.trip.from || '', towing: true, notes: 'Return leg', odoStart: 0, odoEnd: d.trip.legKm })
         d.trip.returnLegAdded = true
+        d.trip.returnLegId = rid
         renumber(d.legs)
       }
     })
@@ -73,11 +76,12 @@ export default function Dashboard({ data, update, go }) {
           <Stat v={litres ? `${nf(litres, 1)} L` : kwh ? `${nf(kwh, 1)} kWh` : '–'} l="fuel/energy" />
         </div>
         {litres > 0 && dist > 0 && <p className="text-sm text-slate-500 mt-2 text-center">{nf(litres / dist * 100, 1)} L/100km · ${nf(cost, 2)} spent</p>}
+        {stayCost > 0 && <p className="text-sm text-slate-500 text-center">${nf(stayCost, 2)} paid for stays</p>}
         {litres > 0 && kwh > 0 && <p className="text-sm text-slate-500 text-center">+ {nf(kwh, 1)} kWh</p>}
         {stops.length > 0 && (
           <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
             <p className="text-xs font-medium text-slate-500 mb-1">Overnight stops ({stops.length})</p>
-            {stops.map(s => <p key={s.id} className="text-sm flex items-center gap-1"><Moon size={13} />{s.name} <span className="text-slate-500 text-xs">· {fmtDate(s.date)}</span></p>)}
+            {stops.map(s => <p key={s.id} className="text-sm flex items-center gap-1"><Moon size={13} />{s.name} <span className="text-slate-500 text-xs">· {fmtDate(s.date)}{s.cost ? ` · $${nf(s.cost, 2)}` : ''}</span></p>)}
           </div>
         )}
       </div>
@@ -85,7 +89,7 @@ export default function Dashboard({ data, update, go }) {
       {form === 'start' && <StartTrip odo={odo} onClose={() => setForm(null)} onSave={({ trip: t, fill, legs }) => {
         update(d => { d.trip = t; if (fill) d.fuel.push(fill); legs.forEach(l => d.legs.push(l)); if (legs.length) renumber(d.legs) }); setForm(null)
       }} />}
-      {form === 'edit' && <EditTrip trip={trip} onClose={() => setForm(null)} onSave={t => { update(d => { d.trip = { ...d.trip, ...t } }); setForm(null) }} />}
+      {form === 'edit' && <EditTrip trip={trip} data={data} odo={odo} onClose={() => setForm(null)} onSave={f => { update(d => applyTripEdit(d, f)); setForm(null) }} />}
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <Quick icon={Route} label="Start trip leg" onClick={() => go('legs', 'new')} />
@@ -122,15 +126,16 @@ function StartTrip({ odo, onClose, onSave }) {
   const submit = (e) => {
     e.preventDefault(); if (!valid) return
     const km = num(f.km), legs = []
+    const outId = uid(), retId = uid(), fillId = uid()
     const from = f.from.trim(), to = f.to.trim()
     if (km > 0) {
-      legs.push({ id: uid(), date: f.date + 'T08:00', from, to, towing: true, notes: '', odoStart: 0, odoEnd: km })
-      if (f.returnTrip && f.endDate) legs.push({ id: uid(), date: f.endDate + 'T08:00', from: to, to: from, towing: true, notes: 'Return leg', odoStart: 0, odoEnd: km })
+      legs.push({ id: outId, date: f.date + 'T08:00', from, to, towing: true, notes: '', odoStart: 0, odoEnd: km })
+      if (f.returnTrip && f.endDate) legs.push({ id: retId, date: f.endDate + 'T08:00', from: to, to: from, towing: true, notes: 'Return leg', odoStart: 0, odoEnd: km })
     }
     onSave({
       legs,
-      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, endDate: f.endDate, returnTrip: f.returnTrip, legKm: km > 0 ? km : 0, returnLegAdded: km > 0 && !!f.returnTrip && !!f.endDate, from, to },
-      fill: l > 0 ? { id: uid(), date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, location: f.station } : null
+      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, endDate: f.endDate, returnTrip: f.returnTrip, legKm: km > 0 ? km : 0, returnLegAdded: km > 0 && !!f.returnTrip && !!f.endDate, outLegId: km > 0 ? outId : '', returnLegId: km > 0 && f.returnTrip && f.endDate ? retId : '', fillId: l > 0 ? fillId : '', from, to },
+      fill: l > 0 ? { id: fillId, date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, location: f.station } : null
     })
   }
   return (
@@ -163,27 +168,68 @@ function StartTrip({ odo, onClose, onSave }) {
   )
 }
 
-function EditTrip({ trip, onClose, onSave }) {
-  const [name, setName] = useState(trip.name)
-  const [start, setStart] = useState(toDay(trip.startedAt))
-  const [from, setFrom] = useState(trip.from || '')
-  const [to, setTo] = useState(trip.to || '')
-  const [end, setEnd] = useState(trip.endDate || '')
-  const [ret, setRet] = useState(trip.returnTrip ?? true)
-  const endErr = end && end < start ? 'End date cannot be before start date' : ''
+// Saves edits to the trip and keeps its linked legs / first fill-up in sync (creating them if missing)
+function applyTripEdit(d, f) {
+  const t = d.trip, km = num(f.km), l = num(f.litres), c = num(f.cost)
+  const from = f.from.trim(), to = f.to.trim()
+  Object.assign(t, { name: f.name.trim() || 'Current trip', startedAt: new Date(f.date + 'T00:00:00').toISOString(), endDate: f.endDate, returnTrip: f.returnTrip, from, to })
+  if (km > 0) {
+    t.legKm = km
+    let out = d.legs.find(x => x.id === t.outLegId)
+    if (!out) { out = { id: uid(), towing: true, notes: '' }; d.legs.push(out); t.outLegId = out.id }
+    Object.assign(out, { date: f.date + 'T08:00', from, to, odoStart: 0, odoEnd: km })
+    let ret = d.legs.find(x => x.id === t.returnLegId)
+    if (f.returnTrip && (f.endDate || ret)) {
+      if (!ret) { ret = { id: uid(), towing: true, notes: 'Return leg' }; d.legs.push(ret); t.returnLegId = ret.id }
+      Object.assign(ret, { date: (f.endDate || ret.date.slice(0, 10)) + 'T08:00', from: to, to: from, odoStart: 0, odoEnd: km })
+    } else if (!f.returnTrip && ret) {
+      d.legs = d.legs.filter(x => x !== ret); t.returnLegId = ''
+    }
+  }
+  t.returnLegAdded = d.legs.some(x => x.id === t.returnLegId)
+  if (l > 0) {
+    let fill = d.fuel.find(x => x.id === t.fillId)
+    if (!fill) { fill = { id: uid(), odo: f.odo === '' ? 0 : num(f.odo) }; d.fuel.push(fill); t.fillId = fill.id }
+    Object.assign(fill, { date: f.date + 'T08:00', litres: l, cost: isNaN(c) ? 0 : c, location: f.station })
+  }
+  renumber(d.legs)
+}
+
+function EditTrip({ trip, data, odo, onClose, onSave }) {
+  const out = data.legs.find(x => x.id === trip.outLegId)
+  const fill = data.fuel.find(x => x.id === trip.fillId)
+  const [f, setF] = useState({
+    name: trip.name, date: toDay(trip.startedAt), endDate: trip.endDate || '', returnTrip: trip.returnTrip ?? true,
+    from: trip.from || '', to: trip.to || '',
+    km: out ? legDistance(out) : (trip.legKm || ''),
+    odo: fill?.odo ?? (odo || ''), litres: fill?.litres ?? '', cost: fill?.cost || '', station: fill?.location || ''
+  })
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const dateErr = f.endDate && f.endDate < f.date ? 'End date cannot be before start date' : ''
+  const kmErr = f.km !== '' && !(num(f.km) > 0) ? 'Must be greater than 0' : ''
+  const valid = f.date && !dateErr && !kmErr && (f.litres === '' || num(f.litres) > 0)
   return (
     <Sheet title="Edit trip" onClose={onClose}>
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); start && !endErr && onSave({ name: name.trim() || 'Current trip', startedAt: new Date(start + 'T00:00:00').toISOString(), endDate: end, returnTrip: ret, from: from.trim(), to: to.trim() }) }}>
-        <Field label="Trip name"><input className="input" value={name} onChange={e => setName(e.target.value)} /></Field>
-        <Field label="Trip start date"><input type="date" className="input" value={start} onChange={e => setStart(e.target.value)} required /></Field>
-        <Field label="End date (optional)" error={endErr}><input type="date" className={`input ${endErr ? 'input-err' : ''}`} min={start} value={end} onChange={e => setEnd(e.target.value)} /></Field>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); valid && onSave(f) }}>
+        <Field label="Trip name"><input className="input" value={f.name} onChange={set('name')} /></Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="From"><input className="input" value={from} onChange={e => setFrom(e.target.value)} /></Field>
-          <Field label="To"><input className="input" value={to} onChange={e => setTo(e.target.value)} /></Field>
+          <Field label="Start date"><input type="date" className="input" value={f.date} onChange={set('date')} required /></Field>
+          <Field label="End date (optional)" error={dateErr}><input type="date" className={`input ${dateErr ? 'input-err' : ''}`} min={f.date} value={f.endDate} onChange={set('endDate')} /></Field>
         </div>
-        <Toggle value={ret} onChange={setRet} />
-        <p className="text-xs text-slate-500">Legs, fuel entries and stops dated on or after the start date count towards this trip.</p>
-        <button className="btn w-full">Save trip</button>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="From"><input className="input" value={f.from} onChange={set('from')} /></Field>
+          <Field label="To"><input className="input" value={f.to} onChange={set('to')} /></Field>
+        </div>
+        <Toggle value={f.returnTrip} onChange={v => setF({ ...f, returnTrip: v })} />
+        <Field label="Distance one way (km)" error={kmErr}><input type="number" inputMode="decimal" step="any" className={`input ${kmErr ? 'input-err' : ''}`} value={f.km} onChange={set('km')} /></Field>
+        <p className="label !mb-0 pt-1">Tank fill-up at start</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={set('litres')} /></Field>
+          <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={set('cost')} /></Field>
+        </div>
+        <Field label="Fuel station"><input className="input" value={f.station} onChange={set('station')} /></Field>
+        <p className="text-xs text-slate-500">Saving updates this trip's legs and first fill-up (in the Legs and Fuel tabs). Extra fill-ups are edited in the Fuel tab.</p>
+        <button className="btn w-full" disabled={!valid}>Save trip</button>
       </form>
     </Sheet>
   )
