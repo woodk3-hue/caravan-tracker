@@ -1,15 +1,22 @@
 import { useState } from 'react'
-import { Route, Fuel, Wrench, Flag, Pencil } from 'lucide-react'
+import { Route, Fuel, Wrench, Flag, Pencil, Moon, Play } from 'lucide-react'
 import { Header, Field, Sheet } from '../ui.jsx'
-import { legDistance, nf, currentOdo, maintStatus, fmtDate } from '../util.js'
+import { legDistance, nf, currentOdo, maintStatus, fmtDate, num } from '../util.js'
+import { uid } from '../storage.js'
+
+const toDay = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
 
 export default function Dashboard({ data, update, go }) {
-  const [editTrip, setEditTrip] = useState(false)
+  const [form, setForm] = useState(null) // 'start' | 'edit'
+  const trip = data.trip
+  const active = trip.active === true
+  const start = new Date(trip.startedAt)
+  const startDay = toDay(trip.startedAt)
   const towing = data.legs.filter(l => l.towing)
   const lifetime = towing.reduce((s, l) => s + legDistance(l), 0)
-  const start = new Date(data.trip.startedAt)
   const tl = data.legs.filter(l => new Date(l.date) >= start)
   const tf = data.fuel.filter(f => new Date(f.date) >= start)
+  const stops = data.sites.filter(s => s.date >= startDay).sort((a, b) => a.date.localeCompare(b.date))
   const dist = tl.reduce((s, l) => s + legDistance(l), 0)
   const dayset = new Set()
   tl.forEach(l => {
@@ -23,10 +30,7 @@ export default function Dashboard({ data, update, go }) {
   const odo = currentOdo(data)
   const due = data.maintenance.filter(i => maintStatus(i, odo).level !== 'ok')
 
-  const newTrip = () => {
-    if (confirm('Start a new trip? Current trip stats reset (data is kept).'))
-      update(d => { d.trip = { name: 'Trip from ' + fmtDate(new Date()), startedAt: new Date().toISOString() } })
-  }
+  const endTrip = () => confirm('End this trip? Your data is kept.') && update(d => { d.trip.active = false })
 
   return (
     <>
@@ -38,26 +42,40 @@ export default function Dashboard({ data, update, go }) {
       </div>
 
       <div className="card mb-3">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="font-semibold flex items-center gap-1">{data.trip.name}
-            <button aria-label="Edit trip" className="p-1 text-slate-400" onClick={() => setEditTrip(true)}><Pencil size={14} /></button>
+        <div className="flex justify-between items-center mb-1">
+          <h2 className="font-semibold flex items-center gap-1">{trip.name}
+            <button aria-label="Edit trip" className="p-1 text-slate-400" onClick={() => setForm('edit')}><Pencil size={14} /></button>
           </h2>
-          <button className="text-sm text-teal-600 dark:text-teal-400 flex items-center gap-1" onClick={newTrip}><Flag size={14} />New trip</button>
+          {active
+            ? <button className="text-sm text-teal-600 dark:text-teal-400 flex items-center gap-1" onClick={endTrip}><Flag size={14} />End trip</button>
+            : <button className="text-sm text-teal-600 dark:text-teal-400 flex items-center gap-1" onClick={() => setForm('start')}><Play size={14} />New trip</button>}
         </div>
+        <p className="text-sm text-slate-500 mb-2">
+          {trip.from || trip.to ? `${trip.from || '?'} → ${trip.to || '?'} · ` : ''}started {fmtDate(trip.startedAt)}{!active && trip.active === false ? ' · ended' : ''}
+        </p>
         <div className="grid grid-cols-3 gap-2 text-center">
           <Stat v={nf(dist)} l="km" /><Stat v={days} l="active days" />
           <Stat v={litres ? `${nf(litres, 1)} L` : kwh ? `${nf(kwh, 1)} kWh` : '–'} l="fuel/energy" />
         </div>
         {litres > 0 && dist > 0 && <p className="text-sm text-slate-500 mt-2 text-center">{nf(litres / dist * 100, 1)} L/100km · ${nf(cost, 2)} spent</p>}
         {litres > 0 && kwh > 0 && <p className="text-sm text-slate-500 text-center">+ {nf(kwh, 1)} kWh</p>}
+        {stops.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 mb-1">Overnight stops ({stops.length})</p>
+            {stops.map(s => <p key={s.id} className="text-sm flex items-center gap-1"><Moon size={13} />{s.name} <span className="text-slate-500 text-xs">· {fmtDate(s.date)}</span></p>)}
+          </div>
+        )}
       </div>
 
-      {editTrip && <TripForm trip={data.trip} onClose={() => setEditTrip(false)}
-        onSave={t => { update(d => { d.trip = t }); setEditTrip(false) }} />}
+      {form === 'start' && <StartTrip odo={odo} onClose={() => setForm(null)} onSave={({ trip: t, fill }) => {
+        update(d => { d.trip = t; if (fill) d.fuel.push(fill) }); setForm(null)
+      }} />}
+      {form === 'edit' && <EditTrip trip={trip} onClose={() => setForm(null)} onSave={t => { update(d => { d.trip = { ...d.trip, ...t } }); setForm(null) }} />}
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-2 gap-2 mb-3">
         <Quick icon={Route} label="Start trip leg" onClick={() => go('legs', 'new')} />
-        <Quick icon={Fuel} label="Log fuel / power" onClick={() => go('fuel', 'new')} />
+        <Quick icon={Fuel} label={active ? 'Add tank fill-up' : 'Log fuel / power'} hi={active} onClick={() => go('fuel', 'new')} />
+        <Quick icon={Moon} label="Add overnight stop" onClick={() => go('sites', 'new')} />
         <Quick icon={Wrench} label="Record service" onClick={() => go('maint', 'record')} />
       </div>
 
@@ -72,22 +90,65 @@ export default function Dashboard({ data, update, go }) {
 }
 
 const Stat = ({ v, l }) => <div><p className="text-xl font-bold">{v}</p><p className="text-xs text-slate-500">{l}</p></div>
-const Quick = ({ icon: Icon, label, onClick }) => (
-  <button onClick={onClick} className="card flex flex-col items-center gap-1 py-4 text-sm font-medium active:bg-slate-100 dark:active:bg-slate-800">
-    <Icon className="text-teal-600 dark:text-teal-400" />{label}
+const Quick = ({ icon: Icon, label, onClick, hi }) => (
+  <button onClick={onClick} className={`card flex flex-col items-center gap-1 py-4 text-sm font-medium ${hi ? '!bg-teal-600 !text-white !border-0' : 'active:bg-slate-100 dark:active:bg-slate-800'}`}>
+    <Icon className={hi ? '' : 'text-teal-600 dark:text-teal-400'} />{label}
   </button>
 )
 
-function TripForm({ trip, onClose, onSave }) {
-  const toLocal = (iso) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10) }
-  const [name, setName] = useState(trip.name)
-  const [start, setStart] = useState(toLocal(trip.startedAt))
+function StartTrip({ odo, onClose, onSave }) {
+  const today = toDay(new Date().toISOString())
+  const [f, setF] = useState({ name: '', date: today, odo: odo || '', from: '', to: '', litres: '', cost: '', station: '' })
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const o = num(f.odo), l = num(f.litres), c = num(f.cost)
+  const odoErr = f.odo !== '' && o < 0 ? 'Must be positive' : ''
+  const valid = f.date && !odoErr && (f.litres === '' || l > 0)
+  const submit = (e) => {
+    e.preventDefault(); if (!valid) return
+    onSave({
+      trip: { name: f.name.trim() || (f.to ? `Trip to ${f.to.trim()}` : 'Trip from ' + fmtDate(f.date)), startedAt: new Date(f.date + 'T00:00:00').toISOString(), active: true, from: f.from.trim(), to: f.to.trim() },
+      fill: l > 0 ? { id: uid(), date: f.date + 'T08:00', odo: isNaN(o) ? 0 : o, litres: l, cost: isNaN(c) ? 0 : c, location: f.station } : null
+    })
+  }
   return (
-    <Sheet title="Current trip" onClose={onClose}>
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); start && onSave({ name: name.trim() || 'Current trip', startedAt: new Date(start + 'T00:00:00').toISOString() }) }}>
+    <Sheet title="Start new trip" onClose={onClose}>
+      <form className="space-y-3" onSubmit={submit}>
+        <Field label="Trip name (optional)"><input className="input" value={f.name} onChange={set('name')} /></Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Start date"><input type="date" className="input" value={f.date} onChange={set('date')} required /></Field>
+          <Field label="Odometer (km)" error={odoErr}><input type="number" inputMode="decimal" className="input" value={f.odo} onChange={set('odo')} /></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Starting from"><input className="input" value={f.from} onChange={set('from')} /></Field>
+          <Field label="Going to"><input className="input" value={f.to} onChange={set('to')} /></Field>
+        </div>
+        <p className="label !mb-0 pt-1">Tank fill-up at start (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Litres"><input type="number" inputMode="decimal" step="any" className="input" value={f.litres} onChange={set('litres')} /></Field>
+          <Field label="Cost ($)"><input type="number" inputMode="decimal" step="any" className="input" value={f.cost} onChange={set('cost')} /></Field>
+        </div>
+        <Field label="Fuel station"><input className="input" value={f.station} onChange={set('station')} /></Field>
+        <button className="btn w-full" disabled={!valid}>Start trip</button>
+      </form>
+    </Sheet>
+  )
+}
+
+function EditTrip({ trip, onClose, onSave }) {
+  const [name, setName] = useState(trip.name)
+  const [start, setStart] = useState(toDay(trip.startedAt))
+  const [from, setFrom] = useState(trip.from || '')
+  const [to, setTo] = useState(trip.to || '')
+  return (
+    <Sheet title="Edit trip" onClose={onClose}>
+      <form className="space-y-3" onSubmit={e => { e.preventDefault(); start && onSave({ name: name.trim() || 'Current trip', startedAt: new Date(start + 'T00:00:00').toISOString(), from: from.trim(), to: to.trim() }) }}>
         <Field label="Trip name"><input className="input" value={name} onChange={e => setName(e.target.value)} /></Field>
         <Field label="Trip start date"><input type="date" className="input" value={start} onChange={e => setStart(e.target.value)} required /></Field>
-        <p className="text-xs text-slate-500">Legs and fuel entries dated on or after this day count towards the current trip.</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="From"><input className="input" value={from} onChange={e => setFrom(e.target.value)} /></Field>
+          <Field label="To"><input className="input" value={to} onChange={e => setTo(e.target.value)} /></Field>
+        </div>
+        <p className="text-xs text-slate-500">Legs, fuel entries and stops dated on or after the start date count towards this trip.</p>
         <button className="btn w-full">Save trip</button>
       </form>
     </Sheet>

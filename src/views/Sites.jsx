@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Trash2, Star, MapPin, Crosshair } from 'lucide-react'
 import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
@@ -7,13 +7,14 @@ import { uid } from '../storage.js'
 
 const AMENITIES = ['Power', 'Water', 'Toilets', 'Showers', 'Dump point', 'Pet friendly', 'Phone signal', 'Free']
 
-export default function Sites({ data, update }) {
+export default function Sites({ data, update, openForm, clearForm }) {
   const [open, setOpen] = useState(false)
+  useEffect(() => { if (openForm === 'new') { setOpen(true); clearForm() } }, [openForm])
   const list = [...data.sites].sort((a, b) => b.date.localeCompare(a.date))
   const del = (id) => confirm('Delete this campsite?') && update(d => { d.sites = d.sites.filter(s => s.id !== id) })
   return (
     <>
-      <Header title="Campsites" action={<button className="btn" onClick={() => setOpen(true)}><Plus size={18} />Add</button>} />
+      <Header title="Campsites & stops" action={<button className="btn" onClick={() => setOpen(true)}><Plus size={18} />Add</button>} />
       {list.length === 0 && <Empty>No campsites saved yet.</Empty>}
       <div className="space-y-2">
         {list.map(s => (
