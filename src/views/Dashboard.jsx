@@ -9,7 +9,12 @@ export default function Dashboard({ data, update, go }) {
   const tl = data.legs.filter(l => new Date(l.date) >= start)
   const tf = data.fuel.filter(f => new Date(f.date) >= start)
   const dist = tl.reduce((s, l) => s + legDistance(l), 0)
-  const days = new Set(tl.map(l => l.date.slice(0, 10))).size
+  const dayset = new Set()
+  tl.forEach(l => {
+    const a = new Date(l.date.slice(0, 10)), b = new Date((l.endDate || l.date).slice(0, 10))
+    for (let t = a; t <= b && dayset.size < 5000; t = new Date(t.getTime() + 864e5)) dayset.add(t.toISOString().slice(0, 10))
+  })
+  const days = dayset.size
   const litres = tf.reduce((s, f) => s + (f.litres || 0), 0)
   const kwh = tf.reduce((s, f) => s + (f.kwh || 0), 0)
   const cost = tf.reduce((s, f) => s + (f.cost || 0), 0)

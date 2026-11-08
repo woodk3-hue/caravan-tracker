@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2, Truck, Car } from 'lucide-react'
 import { Pencil } from 'lucide-react'
 import { Field, Sheet, Empty, Header } from '../ui.jsx'
-import { nowLocal, num, nf, fmtDateTime, legDistance, currentOdo } from '../util.js'
+import { nowLocal, num, nf, fmtDateTime, fmtDate, legDistance, currentOdo } from '../util.js'
 import { uid } from '../storage.js'
 
 // Caravan has no odometer: running total is the sum of leg distances in date order
@@ -28,7 +28,7 @@ export default function Legs({ data, update, openForm, clearForm }) {
             <div className="flex justify-between items-start">
               <div>
                 <p className="font-semibold">{l.from || '?'} → {l.to || '?'}</p>
-                <p className="text-xs text-slate-500">{fmtDateTime(l.date)}</p>
+                <p className="text-xs text-slate-500">{l.endDate && l.endDate.slice(0, 10) !== l.date.slice(0, 10) ? `${fmtDate(l.date)} – ${fmtDate(l.endDate)}` : fmtDateTime(l.date)}</p>
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold">{nf(legDistance(l))} km</p>
@@ -52,18 +52,20 @@ export default function Legs({ data, update, openForm, clearForm }) {
 
 function LegForm({ data, initial, onClose, onSave }) {
   const [f, setF] = useState(initial ? { ...initial, km: legDistance(initial) } : {
-    date: nowLocal(), km: '', from: '', to: '', towing: true, notes: ''
+    date: nowLocal(), endDate: '', km: '', from: '', to: '', towing: true, notes: ''
   })
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const km = num(f.km)
   const kmErr = f.km !== '' && !(km > 0) ? 'Distance must be greater than 0' : ''
-  const valid = km > 0
+  const dateErr = f.endDate && f.endDate < f.date.slice(0, 10) ? 'End date cannot be before start date' : ''
+  const valid = km > 0 && !dateErr
   const before = initial ? initial.odoStart : currentOdo(data)
 
   return (
     <Sheet title={initial ? 'Edit trip leg' : 'New trip leg'} onClose={onClose}>
       <form className="space-y-3" onSubmit={ev => { ev.preventDefault(); if (!valid) return; const { km: _k, ...rest } = f; onSave({ ...rest, id: initial?.id ?? uid(), odoStart: before, odoEnd: before + km }) }}>
-        <Field label="Date & time"><input type="datetime-local" className="input" value={f.date} onChange={set('date')} required /></Field>
+        <Field label="Start date & time"><input type="datetime-local" className="input" value={f.date} onChange={set('date')} required /></Field>
+        <Field label="End date (optional, for multi-day trips)" error={dateErr}><input type="date" className={`input ${dateErr ? 'input-err' : ''}`} value={f.endDate || ''} min={f.date.slice(0, 10)} onChange={set('endDate')} /></Field>
         <Field label="Distance travelled (km)" error={kmErr}><input type="number" inputMode="decimal" step="any" className={`input ${kmErr ? 'input-err' : ''}`} value={f.km} onChange={set('km')} required /></Field>
         {valid && <p className="text-center font-semibold text-teal-600 dark:text-teal-400">Caravan total after: {nf(before + km, 1)} km</p>}
         <div className="grid grid-cols-2 gap-2">
