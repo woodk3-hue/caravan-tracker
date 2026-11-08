@@ -24,7 +24,11 @@ export default function Dashboard({ data, update, go }) {
     for (let t = a; t <= b && dayset.size < 5000; t = new Date(t.getTime() + 864e5)) dayset.add(t.toISOString().slice(0, 10))
   })
   const days = dayset.size
-  const litres = tf.reduce((s, f) => s + (f.litres || 0), 0)
+  const bought = tf.reduce((s, f) => s + (f.litres || 0), 0)
+  // A full fill-up at the start of the trip only tops up fuel used before it, so it isn't fuel used on this trip
+  const fills = tf.filter(f => f.litres > 0).sort((a, b) => a.date.localeCompare(b.date))
+  const skipFirst = fills.length > 1 && fills[0].full !== false
+  const litres = skipFirst ? bought - fills[0].litres : bought
   const kwh = tf.reduce((s, f) => s + (f.kwh || 0), 0)
   const cost = tf.reduce((s, f) => s + (f.cost || 0), 0)
   const econ = fuelEconomy(data)
@@ -76,9 +80,10 @@ export default function Dashboard({ data, update, go }) {
         </p>
         <div className="grid grid-cols-3 gap-2 text-center">
           <Stat v={nf(dist)} l="km" /><Stat v={days} l="active days" />
-          <Stat v={litres ? `${nf(litres, 1)} L` : kwh ? `${nf(kwh, 1)} kWh` : '–'} l="fuel/energy" />
+          <Stat v={litres ? `${nf(litres, 1)} L` : kwh ? `${nf(kwh, 1)} kWh` : '–'} l={litres && skipFirst ? 'fuel used' : 'fuel/energy'} />
         </div>
         {litres > 0 && dist > 0 && <p className="text-sm text-slate-500 mt-2 text-center">{nf(litres / dist * 100, 1)} L/100km · ${nf(cost, 2)} spent</p>}
+        {skipFirst && <p className="text-xs text-slate-500 text-center">{nf(bought, 1)} L bought in total, including the {nf(fills[0].litres, 1)} L start fill-up</p>}
         {lastEcon && <p className="text-sm text-slate-500 text-center">Last full fill-up: {nf(lastEcon, 1)} L/100km{tank > 0 ? ` · ~${nf(tank / lastEcon * 100)} km per tank` : ''}</p>}
         {stayCost > 0 && <p className="text-sm text-slate-500 text-center">${nf(stayCost, 2)} paid for stays</p>}
         {litres > 0 && kwh > 0 && <p className="text-sm text-slate-500 text-center">+ {nf(kwh, 1)} kWh</p>}
