@@ -174,6 +174,20 @@ function StartTrip({ odo, onClose, onSave }) {
 function applyTripEdit(d, f) {
   const t = d.trip, km = num(f.km), l = num(f.litres), c = num(f.cost)
   const from = f.from.trim(), to = f.to.trim()
+  // Adopt legs created before trips were linked to them, so edits update rather than duplicate
+  const oldDay = toDay(t.startedAt), pf = t.from || '', pt = t.to || ''
+  if (!d.legs.some(x => x.id === t.outLegId)) {
+    const m = d.legs.find(x => (x.from || '') === pf && (x.to || '') === pt && x.date.slice(0, 10) >= oldDay)
+    if (m) t.outLegId = m.id
+  }
+  if (!d.legs.some(x => x.id === t.returnLegId)) {
+    const m = d.legs.find(x => x.id !== t.outLegId && (x.from || '') === pt && (x.to || '') === pf && x.date.slice(0, 10) >= oldDay)
+    if (m) t.returnLegId = m.id
+  }
+  if (!d.fuel.some(x => x.id === t.fillId)) {
+    const m = d.fuel.find(x => x.date.slice(0, 10) === oldDay && x.litres)
+    if (m) t.fillId = m.id
+  }
   Object.assign(t, { name: f.name.trim() || 'Current trip', startedAt: new Date(f.date + 'T00:00:00').toISOString(), endDate: f.endDate, returnTrip: f.returnTrip, from, to })
   if (km > 0) {
     t.legKm = km
@@ -189,11 +203,16 @@ function applyTripEdit(d, f) {
     }
   }
   t.returnLegAdded = d.legs.some(x => x.id === t.returnLegId)
+  // Remove exact copies of the trip's legs left by earlier edits
+  const same = (a, b) => (a.from || '') === (b.from || '') && (a.to || '') === (b.to || '') && a.date.slice(0, 10) === b.date.slice(0, 10) && legDistance(a) === legDistance(b)
+  const linked = [d.legs.find(x => x.id === t.outLegId), d.legs.find(x => x.id === t.returnLegId)].filter(Boolean)
+  d.legs = d.legs.filter(x => linked.includes(x) || !linked.some(k => same(x, k)))
   if (l > 0) {
     let fill = d.fuel.find(x => x.id === t.fillId)
     if (!fill) { fill = { id: uid(), odo: f.odo === '' ? 0 : num(f.odo) }; d.fuel.push(fill); t.fillId = fill.id }
     Object.assign(fill, { date: f.date + 'T08:00', litres: l, cost: isNaN(c) ? 0 : c, location: f.station })
     if (num(f.ppl) >= 0) fill.ppl = num(f.ppl)
+    d.fuel = d.fuel.filter(x => x === fill || !(x.date === fill.date && x.litres === fill.litres && x.cost === fill.cost && (x.location || '') === (fill.location || '')))
   }
   renumber(d.legs)
 }
