@@ -10,12 +10,9 @@ export const nf = (n, d = 0) => Number(n || 0).toLocaleString(undefined, { maxim
 
 export const legDistance = (l) => Math.max(0, l.odoEnd - l.odoStart)
 
+// The caravan has no odometer: its reading is the running total of all leg distances
 export function currentOdo(data) {
-  let m = 0
-  data.legs.forEach(l => { m = Math.max(m, l.odoEnd || 0) })
-  data.fuel.forEach(f => { m = Math.max(m, f.odo || 0) })
-  data.maintenance.forEach(i => i.history.forEach(h => { m = Math.max(m, h.odo || 0) }))
-  return m
+  return data.legs.reduce((s, l) => s + legDistance(l), 0)
 }
 
 export function maintStatus(item, odo) {
