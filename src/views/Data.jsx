@@ -27,11 +27,11 @@ export default function Data({ data, update, replace }) {
     <>
       <Header title="Data & backup" />
       <div className="card mb-3">
-        <Field label="Vehicle fuel tank size (litres)">
-          <input type="number" inputMode="decimal" min="1" className="input" value={data.settings?.tankL ?? 120}
+        <Field label="Vehicle fuel tank size (litres, optional)">
+          <input type="number" inputMode="decimal" min="1" className="input" placeholder="e.g. 120" value={data.settings?.tankL ?? ''}
             onChange={e => { const v = e.target.value; update(d => { d.settings = { ...d.settings, tankL: v === '' ? '' : Number(v) } }) }} />
         </Field>
-        <p className="text-xs text-slate-500 mt-1">Fill-ups larger than this are flagged. Currently {tankL(data)} L.</p>
+        <p className="text-xs text-slate-500 mt-1">Used to estimate how far a full tank takes you. No limits are applied to fill-ups.</p>
       </div>
       <div className="card space-y-3">
         <p className="text-sm text-slate-500">All data is stored on this device only. Export regularly to keep a backup.</p>

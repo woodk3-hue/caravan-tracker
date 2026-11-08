@@ -50,4 +50,19 @@ export function linkFuel(f, key, value, litresKey = 'litres') {
   return n
 }
 
-export const tankL = (data) => Number(data.settings?.tankL) > 0 ? Number(data.settings.tankL) : 120
+export const tankL = (data) => Number(data.settings?.tankL) > 0 ? Number(data.settings.tankL) : 0
+
+// Fuel economy (L/100km) at each fill-to-full: litres added since the previous full fill-up / km travelled between them
+export function fuelEconomy(data) {
+  const fills = data.fuel.filter(x => x.litres > 0).sort((a, b) => a.date.localeCompare(b.date))
+  const out = {}
+  let prev = null, acc = 0
+  for (const x of fills) {
+    if (prev) acc += x.litres
+    if (x.full !== false) {
+      if (prev && x.odo > prev.odo) out[x.id] = acc / (x.odo - prev.odo) * 100
+      prev = x; acc = 0
+    }
+  }
+  return out
+}
