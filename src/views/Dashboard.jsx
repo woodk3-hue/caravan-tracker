@@ -98,7 +98,7 @@ export default function Dashboard({ data, update, go }) {
         {stops.length > 0 && (
           <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
             <p className="text-xs font-medium text-slate-500 mb-1">Overnight stops ({stops.length})</p>
-            {stops.map(s => <p key={s.id} className="text-sm flex items-center gap-1"><Moon size={13} />{s.name} <span className="text-slate-500 text-xs">· {fmtDate(s.date)}{s.cost ? ` · $${nf(s.cost, 2)}` : ''}</span></p>)}
+            {stops.map(s => <p key={s.id} className="text-sm flex items-center gap-1"><Moon size={13} />{s.name} <span className="text-slate-500 text-xs">· {fmtDate(s.date)}{s.nights ? ` · ${s.nights} night${s.nights > 1 ? 's' : ''}` : ''}{s.cost ? ` · $${nf(s.cost, 2)}` : ''}</span></p>)}
           </div>
         )}
       </div>
