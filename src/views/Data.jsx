@@ -7,6 +7,11 @@ import { tankL } from '../util.js'
 export default function Data({ data, update, replace }) {
   const file = useRef()
   const [msg, setMsg] = useState(null)
+  const cv = data.caravan || {}
+  const setCv = (k, numeric) => (e) => {
+    const v = e.target.value
+    update(d => { d.caravan = { ...d.caravan, [k]: numeric ? (v === '' ? '' : Number(v)) : v } })
+  }
 
   const onFile = async (e) => {
     const f = e.target.files[0]
@@ -25,7 +30,26 @@ export default function Data({ data, update, replace }) {
 
   return (
     <>
-      <Header title="Data & backup" />
+      <Header title="Caravan & data" />
+      <div className="card mb-3 space-y-3">
+        <h2 className="font-semibold">My caravan <span className="text-xs font-normal text-slate-500">(all optional)</span></h2>
+        <Field label="Caravan make / model / type"><input className="input" placeholder="e.g. Jayco Journey 17ft" value={cv.type || ''} onChange={setCv('type')} /></Field>
+        <Field label="Rego number"><input className="input uppercase" value={cv.rego || ''} onChange={setCv('rego')} /></Field>
+        <p className="label !mb-0 pt-1">Registration</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Rego due date"><input type="date" className="input" value={cv.regoDue || ''} onChange={setCv('regoDue')} /></Field>
+          <Field label="Amount ($)"><input type="number" inputMode="decimal" step="any" min="0" className="input" value={cv.regoAmount ?? ''} onChange={setCv('regoAmount', true)} /></Field>
+        </div>
+        <p className="label !mb-0 pt-1">Insurance</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Insurer"><input className="input" value={cv.insurer || ''} onChange={setCv('insurer')} /></Field>
+          <Field label="Policy number"><input className="input" value={cv.policy || ''} onChange={setCv('policy')} /></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Insurance due date"><input type="date" className="input" value={cv.insuranceDue || ''} onChange={setCv('insuranceDue')} /></Field>
+          <Field label="Amount ($)"><input type="number" inputMode="decimal" step="any" min="0" className="input" value={cv.insuranceAmount ?? ''} onChange={setCv('insuranceAmount', true)} /></Field>
+        </div>
+      </div>
       <div className="card mb-3">
         <Field label="Vehicle fuel tank size (litres, optional)">
           <input type="number" inputMode="decimal" min="1" className="input" placeholder="e.g. 120" value={data.settings?.tankL ?? ''}

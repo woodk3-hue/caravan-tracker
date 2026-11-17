@@ -38,6 +38,12 @@ export default function Dashboard({ data, update, go }) {
   const used = canUse ? Math.max(0, tank + refilled - Number(trip.fuelLeft)) : null
   const stayCost = stops.reduce((s, x) => s + (Number(x.cost) || 0), 0)
   const odo = currentOdo(data)
+  const cv = data.caravan || {}
+  const todayMs = new Date(toDay(new Date().toISOString()) + 'T00:00:00').getTime()
+  const renewals = [['Rego', cv.regoDue, cv.regoAmount], ['Insurance', cv.insuranceDue, cv.insuranceAmount]]
+    .filter(([, d]) => d)
+    .map(([label, date, amount]) => ({ label, date, amount, days: Math.round((new Date(date + 'T00:00:00').getTime() - todayMs) / 864e5) }))
+    .sort((a, b) => a.days - b.days)
   const due = data.maintenance.filter(i => maintStatus(i, odo).level !== 'ok')
 
   const endTrip = () => {
@@ -71,6 +77,7 @@ export default function Dashboard({ data, update, go }) {
         <p className="text-sm opacity-80">Lifetime km towed</p>
         <p className="text-4xl font-bold">{nf(lifetime)} <span className="text-lg font-medium">km</span></p>
         <p className="text-sm opacity-80 mt-1">Odometer: {nf(odo)} km</p>
+        {(data.caravan?.type || data.caravan?.rego) && <p className="text-sm opacity-80">{[data.caravan.type, data.caravan.rego && data.caravan.rego.toUpperCase()].filter(Boolean).join(' · ')}</p>}
       </div>
 
       <div className="card mb-3">
@@ -115,6 +122,16 @@ export default function Dashboard({ data, update, go }) {
         <Quick icon={Wrench} label="Record service" onClick={() => go('maint', 'record')} />
       </div>
 
+      {renewals.length > 0 && (
+        <div className="card border-amber-400 dark:border-amber-600 mb-3">
+          <h2 className="font-semibold mb-1">Renewals</h2>
+          {renewals.map(r => (
+            <p key={r.label} className={`text-sm ${r.days < 0 ? 'text-red-500' : r.days <= 30 ? 'text-amber-600' : 'text-slate-500'}`}>
+              • {r.label} {r.days < 0 ? `overdue by ${-r.days} day${r.days === -1 ? '' : 's'}` : r.days === 0 ? 'due today' : `due in ${r.days} day${r.days === 1 ? '' : 's'}`} ({fmtDate(r.date + 'T00:00')}){r.amount ? ` · $${nf(r.amount, 2)}` : ''}
+            </p>
+          ))}
+        </div>
+      )}
       {due.length > 0 && (
         <div className="card border-amber-400 dark:border-amber-600">
           <h2 className="font-semibold mb-1">Maintenance due</h2>
