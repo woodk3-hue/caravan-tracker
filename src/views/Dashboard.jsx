@@ -77,7 +77,15 @@ export default function Dashboard({ data, update, go }) {
         <p className="text-sm opacity-80">Lifetime km towed</p>
         <p className="text-4xl font-bold">{nf(lifetime)} <span className="text-lg font-medium">km</span></p>
         <p className="text-sm opacity-80 mt-1">Odometer: {nf(odo)} km</p>
-        {(data.caravan?.type || data.caravan?.rego) && <p className="text-sm opacity-80">{[data.caravan.type, data.caravan.rego && data.caravan.rego.toUpperCase()].filter(Boolean).join(' · ')}</p>}
+        {(data.caravan?.nickname || data.caravan?.type || data.caravan?.rego) && (
+          <div className="mt-3 pt-3 border-t border-white/25 flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              {data.caravan.nickname && <p className="text-lg font-bold leading-tight truncate">{data.caravan.nickname}</p>}
+              {data.caravan.type && <p className="text-sm opacity-80 truncate">{data.caravan.type}</p>}
+            </div>
+            {data.caravan.rego && <span className="shrink-0 rounded-md bg-white text-slate-900 px-2.5 py-1 text-sm font-bold tracking-widest uppercase">{data.caravan.rego}</span>}
+          </div>
+        )}
       </div>
 
       <div className="card mb-3">

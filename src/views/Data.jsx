@@ -33,7 +33,8 @@ export default function Data({ data, update, replace }) {
       <Header title="Caravan & data" />
       <div className="card mb-3 space-y-3">
         <h2 className="font-semibold">My caravan <span className="text-xs font-normal text-slate-500">(all optional)</span></h2>
-        <Field label="Caravan make / model / type"><input className="input" placeholder="e.g. Jayco Journey 17ft" value={cv.type || ''} onChange={setCv('type')} /></Field>
+        <Field label="Nickname (optional)"><input className="input" placeholder="e.g. Bessie" value={cv.nickname || ''} onChange={setCv('nickname')} /></Field>
+        <Field label="Caravan name / make / model"><input className="input" placeholder="e.g. Jayco Journey 17ft" value={cv.type || ''} onChange={setCv('type')} /></Field>
         <Field label="Rego number"><input className="input uppercase" value={cv.rego || ''} onChange={setCv('rego')} /></Field>
         <p className="label !mb-0 pt-1">Registration</p>
         <div className="grid grid-cols-2 gap-2">
